@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MCP Console Logger</title>
+  <style>
+    body {
+      width: 320px;
+      padding: 15px;
+      font-family: Arial, sans-serif;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 10px;
+    }
+    .status-connected {
+      background-color: #4caf50;
+    }
+    .status-disconnected {
+      background-color: #f44336;
+    }
+    .status-error {
+      background-color: #ff9800;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    input, button {
+      margin-bottom: 15px;
+      padding: 5px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      padding: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    .monitoring-section {
+      margin-bottom: 10px;
+      border-top: 1px solid #ddd;
+      padding-top: 10px;
+    }
+    .monitoring-section h3 {
+      margin: 0 0 8px 0;
+      font-size: 1em;
+    }
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 2px;
+      font-size: 0.95em;
+    }
+    .status-active {
+      color: #4caf50;
+      font-weight: bold;
+    }
+    .counters {
+      margin-bottom: 10px;
+      font-size: 0.98em;
+    }
+    .counters div {
+      margin-bottom: 2px;
+    }
+    #clearAll {
+      background-color: #d32f2f;
+      margin-bottom: 0;
+    }
+    #clearAll:hover {
+      background-color: #b71c1c;
+    }
+  </style>
+</head>
+<body>
+  <h2>MCP Console Logger</h2>
+  <div class="status">
+    <div id="statusIndicator" class="status-indicator status-disconnected"></div>
+    <div id="statusText">Disconnected</div>
+  </div>
+  <label for="portInput">WebSocket Port:</label>
+  <input type="number" id="portInput" min="1" max="65535" value="8765">
+  <button id="savePort">Save Port</button>
+  <button id="startServer">Start Server</button>
+  <button id="clearLogs">Clear Logs</button>
+  <div class="monitoring-section">
+    <h3>Monitoring Status</h3>
+    <div class="status-row">
+      <span>Console Logs:</span>
+      <span class="status-active">Active</span>
+    </div>
+    <div class="status-row">
+      <span>Network Activity:</span>
+      <span class="status-active">Active</span>
+    </div>
+  </div>
+  <div class="counters">
+    <div>Console logs: <span id="logCount">0</span></div>
+    <div>Network requests: <span id="requestCount">0</span></div>
+  </div>
+  <button id="clearAll">Clear All Data</button>
+  <script src="popup.js"></script>
+</body>
+</html>
