@@ -1,0 +1,41 @@
+{
+  "name": "mcp-console-logger",
+  "version": "1.0.0",
+  "description": "Chrome extension that serves as an MCP AI agent server, capturing console logs and network activity",
+  "main": "background.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "lint": "eslint . --ext .ts,.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "webextension-polyfill": "^0.12.0",
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.250",
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.11.0",
+    "@types/webextension-polyfill": "^0.12.3",
+    "@typescript-eslint/eslint-plugin": "^6.18.0",
+    "@typescript-eslint/parser": "^6.18.0",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "moduleFileExtensions": [
+      "ts",
+      "js",
+      "json",
+      "node"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.test.ts"
+    ]
+  }
+}
