@@ -1,24 +1,80 @@
 import { logger } from '../utils/logger';
+import { DEFAULT_CONFIG } from '../config';
 
+/**
+ * Manages WebSocket connection with automatic reconnection and message queuing
+ * @public
+ */
 export class WebSocketManager {
+  private static instance: WebSocketManager | null = null;
+  
+  /**
+   * Get singleton instance of WebSocketManager
+   * @param port - WebSocket server port
+   */
+  public static getInstance(port: number = DEFAULT_CONFIG.WS_PORT): WebSocketManager {
+    if (!WebSocketManager.instance || WebSocketManager.instance.port !== port) {
+      WebSocketManager.instance = new WebSocketManager(port);
+    }
+    return WebSocketManager.instance;
+  }
   private ws: WebSocket | null = null;
-  private readonly maxRetries = 5;
   private retryCount = 0;
   private retryTimeout: ReturnType<typeof setTimeout> | null = null;
   private readonly eventListeners: { [event: string]: ((...args: any[]) => void)[] } = {};
-  private isConnected = false;
+  private connectionState: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected';
+  private messageQueue: any[] = [];
+  private connectionAttempts = 0;
+  private lastError: Error | null = null;
 
-  constructor(public port: number) {
+  private constructor(public port: number) {
+    if (!this.isValidPort(port)) {
+      throw new Error(`Invalid WebSocket port: ${port}. Must be between 1 and 65535`);
+    }
     this.connect();
   }
 
+  private isValidPort(port: number): boolean {
+    return Number.isInteger(port) && port > 0 && port <= 65535;
+  }
+
+  /**
+   * Get the current connection state
+   */
+  public get state() {
+    return this.connectionState;
+  }
+
+  /**
+   * Get the last error that occurred
+   */
+  public get error() {
+    return this.lastError;
+  }
+
+  /**
+   * Connect to the WebSocket server
+   * @returns Promise that resolves when connection is established or rejects on error
+   */
   public async connect(): Promise<boolean> {
-    if (this.ws) {
-      this.close();
+    if (this.connectionState === 'connected' || this.connectionState === 'connecting') {
+      logger.warn('WebSocket connection already in progress or established');
+      return this.connectionState === 'connected';
     }
+
+    this.connectionState = 'connecting';
+    this.connectionAttempts++;
+    
+    // Clean up any existing connection
+    this.close();
 
     try {
       const url = `ws://localhost:${this.port}`;
+      
+      // Validate URL for security
+      if (!this.isValidWsUrl(url)) {
+        throw new Error(`Invalid WebSocket URL: ${url}`);
+      }
       this.ws = new WebSocket(url);
       
       return await new Promise<boolean>((resolve) => {
@@ -28,29 +84,34 @@ export class WebSocketManager {
         }
 
         const onOpen = () => {
-          this.isConnected = true;
+          this.connectionState = 'connected';
           this.retryCount = 0;
+          this.connectionAttempts = 0;
+          this.lastError = null;
+          
           if (this.retryTimeout) {
             clearTimeout(this.retryTimeout);
             this.retryTimeout = null;
           }
+          
           logger.info('WebSocket connection established');
           this.emit('open');
+          
+          // Process any queued messages
+          this.processQueue();
           resolve(true);
         };
 
         const onError = (error: Event) => {
-          logger.error('WebSocket connection error:', error);
-          this.emit('error', error);
-          this.attemptReconnect();
+          this.handleError(error);
           resolve(false);
         };
 
         const onClose = () => {
-          this.isConnected = false;
+          this.connectionState = 'disconnected';
           logger.info('WebSocket connection closed');
           this.emit('close');
-          this.attemptReconnect();
+          this.scheduleReconnect();
         };
 
         const onMessage = (event: MessageEvent) => {
@@ -70,30 +131,75 @@ export class WebSocketManager {
       });
     } catch (error) {
       logger.error('Failed to create WebSocket:', error);
-      this.attemptReconnect();
+      this.scheduleReconnect();
       return false;
     }
   }
 
-  private attemptReconnect(): void {
-    if (this.retryCount >= this.maxRetries) {
-      logger.error('Max WebSocket reconnection attempts reached');
+  private isValidWsUrl(url: string): boolean {
+    try {
+      const { protocol, hostname } = new URL(url);
+      return DEFAULT_CONFIG.ALLOWED_WS_ORIGINS.some(
+        origin => url.startsWith(origin)
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.retryCount >= DEFAULT_CONFIG.WS_MAX_RETRIES) {
+      this.connectionState = 'error';
+      this.lastError = new Error(`Max WebSocket reconnection attempts (${DEFAULT_CONFIG.WS_MAX_RETRIES}) reached`);
+      logger.error(this.lastError.message);
+      this.emit('error', this.lastError);
       return;
     }
 
     this.retryCount++;
-    const delay = Math.min(1000 * Math.pow(2, this.retryCount), 30000);
+    const delay = Math.min(
+      DEFAULT_CONFIG.WS_RETRY_DELAY * Math.pow(2, this.retryCount - 1),
+      DEFAULT_CONFIG.WS_MAX_RETRY_DELAY
+    );
 
-    logger.warn(`Attempting to reconnect in ${delay}ms (attempt ${this.retryCount}/${this.maxRetries})`);
+    logger.warn(`Attempting to reconnect in ${delay}ms (attempt ${this.retryCount}/${DEFAULT_CONFIG.WS_MAX_RETRIES})`);
     
     this.retryTimeout = setTimeout(() => {
       this.connect();
     }, delay);
   }
 
-  public send(data: any): void {
-    if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      logger.warn('WebSocket is not connected');
+  private handleError = (error: Event | Error) => {
+    this.connectionState = 'error';
+    this.lastError = error instanceof Error ? error : new Error(String(error));
+    
+    logger.error('WebSocket connection error:', this.lastError);
+    this.emit('error', this.lastError);
+    
+    // Schedule reconnect if we're not in a connecting state
+    if (this.connectionState === 'error') {
+      this.scheduleReconnect();
+    }
+    
+    return false; // For use in Promise rejections
+  };
+
+  /**
+   * Send data through the WebSocket connection
+   * @param data - Data to send (will be JSON.stringified)
+   * @returns Promise that resolves when the message is sent or queued
+   */
+  public async send(data: any): Promise<void> {
+    if (this.connectionState !== 'connected' || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      // Queue the message if we're not connected
+      this.messageQueue.push(data);
+      
+      // If we're not trying to connect, try to reconnect
+      if (this.connectionState !== 'connecting') {
+        this.connect().catch(error => {
+          logger.error('Failed to reconnect:', error);
+        });
+      }
       return;
     }
 
@@ -106,38 +212,95 @@ export class WebSocketManager {
     }
   }
 
-  public close(): void {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-      this.isConnected = false;
-    }
+  /**
+   * Close the WebSocket connection
+   * @param code - Close code
+   * @param reason - Close reason
+   */
+  public close(code?: number, reason?: string): void {
+    this.connectionState = 'disconnected';
+    
     if (this.retryTimeout) {
       clearTimeout(this.retryTimeout);
       this.retryTimeout = null;
     }
+
+    if (this.ws) {
+      try {
+        if (this.ws.readyState === WebSocket.OPEN) {
+          this.ws.close(code, reason);
+        }
+      } catch (error) {
+        logger.error('Error closing WebSocket:', error);
+      } finally {
+        this.ws = null;
+      }
+    }
   }
 
-  public on(event: string, callback: (...args: any[]) => void): void {
+  /**
+   * Add an event listener
+   * @param event - Event name ('open', 'close', 'error', 'message')
+   * @param callback - Event handler
+   */
+  public on(event: 'open' | 'close' | 'error' | 'message', callback: (...args: any[]) => void): void {
     if (!this.eventListeners[event]) {
       this.eventListeners[event] = [];
     }
     this.eventListeners[event].push(callback);
   }
 
-  private emit(event: string, ...args: any[]): void {
-    const listeners = this.eventListeners[event];
-    if (listeners) {
-      for (const listener of listeners) {
+  /**
+   * Remove an event listener
+   * @param event - Event name
+   * @param callback - Event handler to remove
+   */
+  public off(event: 'open' | 'close' | 'error' | 'message', callback: (...args: any[]) => void): void {
+    if (!this.eventListeners[event]) return;
+    this.eventListeners[event] = this.eventListeners[event].filter(cb => cb !== callback);
+  }
+
+  /**
+   * Emit an event to all listeners
+   * @param event - Event name
+   * @param args - Event arguments
+   */
+  private emit(event: 'open' | 'close' | 'error' | 'message', ...args: any[]): void {
+    if (this.eventListeners[event]) {
+      for (const callback of this.eventListeners[event]) {
         try {
-          listener(...args);
+          callback(...args);
         } catch (error) {
-          logger.error(`Error in ${event} listener:`, error);
+          logger.error(`Error in ${event} handler:`, error);
         }
+      }
+    }
+  }
+
+  // Process any queued messages when connection is established
+  private processQueue(): void {
+    while (this.messageQueue.length > 0 && this.connectionState === 'connected' && this.ws?.readyState === WebSocket.OPEN) {
+      const message = this.messageQueue.shift();
+      try {
+        const messageStr = typeof message === 'string' ? message : JSON.stringify(message);
+        this.ws.send(messageStr);
+      } catch (error) {
+        logger.error('Error sending queued message:', error);
+        // Re-queue the message if sending failed
+        this.messageQueue.unshift(message);
+        break;
       }
     }
   }
 }
 
-// Create a singleton instance
-export const wsManager = new WebSocketManager(8765);
+/**
+ * Get the WebSocket manager instance
+ * @returns WebSocketManager instance
+ */
+export function getWebSocketManager(port: number = DEFAULT_CONFIG.WS_PORT): WebSocketManager {
+  return WebSocketManager.getInstance(port);
+}
+
+// Default export for backward compatibility
+export const wsManager = getWebSocketManager();

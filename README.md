@@ -1,18 +1,18 @@
-# MCP Console Logger
+# Chrome Dev MCP
 
-**MCP Console Logger** is an open-source Chrome extension that captures browser console logs and network activity, making them accessible to clients via WebSocket. It's designed for advanced debugging, automation, and integration with agent workflows using the Model Context Protocol (MCP).
+**Chrome Dev MCP** is a powerful Chrome extension that captures browser console logs and network activity, making them accessible via WebSocket. It's designed for developers and automated testing frameworks that need real-time access to browser console data and network activity through the Model Context Protocol (MCP).
 
 ---
 
 ## Features
 
-- **Console Log Capture:** Automatically collects all `console.log`, `console.error`, `console.warn`, etc. from web pages
-- **Network Activity Monitoring:** Records HTTP(S) requests and responses, including headers, timing, and status codes
-- **WebSocket Integration:** Real-time data streaming to connected clients with automatic reconnection
-- **Modular Architecture:** Clean separation of concerns with dedicated modules for WebSocket, network monitoring, and message handling
-- **TypeScript Support:** Full type safety throughout the codebase
-- **Configurable Logging:** Adjustable log levels for debugging and production use
-- **Privacy Protections:** Sensitive headers and form fields are masked before sharing
+- **Comprehensive Console Capture:** Captures all console methods (`console.log`, `console.error`, `console.warn`, `console.info`, `console.debug`) with full stack traces and context
+- **Memory-Efficient Logging:** Implements a circular buffer to prevent memory leaks in long-running tabs
+- **Reliable WebSocket Integration:** Robust WebSocket server with automatic reconnection and error handling
+- **TypeScript-First:** Built with TypeScript for type safety and better developer experience
+- **Configurable:** Customize log retention, WebSocket settings, and more
+- **Privacy-Focused:** Automatically masks sensitive data in logs
+- **Error Recovery:** Built-in retry mechanisms for failed log transmissions
 
 ---
 
@@ -24,8 +24,8 @@
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/YOUR-USERNAME/mcp-console-logger.git
-cd mcp-console-logger
+git clone https://github.com/your-username/chrome-dev-mcp.git
+cd chrome-dev-mcp
 ```
 
 ### 2. Install Dependencies
@@ -53,35 +53,74 @@ npm run build
 3. Use the controls to manage logging and network monitoring
 
 ### WebSocket API
-Connect to the WebSocket server at `ws://localhost:8080` (default port) to receive real-time updates.
+Connect to the WebSocket server at `ws://localhost:8765` (default port) to receive real-time console logs.
 
-#### Available Events
-- `networkRequestUpdate`: Fired when a new network request is captured
-- `consoleLog`: Fired when a new console log is captured
-- `error`: Fired when an error occurs
+#### Message Format
+Each message is a JSON object with the following structure:
+
+```typescript
+interface ConsoleLog {
+  id: string;             // Unique identifier for the log entry
+  timestamp: string;      // ISO timestamp
+  level: 'log' | 'info' | 'warn' | 'error' | 'debug';
+  message: string;        // The log message
+  url: string;            // URL of the page where the log originated
+  tabId: number | null;   // Chrome tab ID (set by background script)
+  stack?: string;         // Stack trace if available
+  context: {
+    userAgent: string;    // User agent string
+    timestamp: number;    // Unix timestamp
+    location: string;     // Full URL of the page
+  };
+}
+```
 
 #### Example Client Connection
 ```javascript
-const ws = new WebSocket('ws://localhost:8080');
+const ws = new WebSocket('ws://localhost:8765');
+
+ws.onopen = () => {
+  console.log('Connected to Chrome Dev MCP WebSocket');};
 
 ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Received data:', data);
+  try {
+    const logEntry = JSON.parse(event.data);
+    console.log(`[${logEntry.level.toUpperCase()}] ${logEntry.message}`);
+    if (logEntry.stack) {
+      console.log('Stack trace:', logEntry.stack);
+    }
+  } catch (error) {
+    console.error('Error parsing WebSocket message:', error);
+  }
 };
 
-// Send a command to update settings
-ws.send(JSON.stringify({
-  type: 'updateSettings',
-  settings: { logLevel: 'debug' }
-}));
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
+
+ws.onclose = () => {
+  console.log('Disconnected from WebSocket');
+};
 ```
 
 ### Configuration
-Edit the `src/config.ts` file to customize the following settings:
-- WebSocket port
-- Log levels
-- Network request filtering
-- Privacy settings
+Default configuration can be found in `src/config.ts`. You can customize:
+
+```typescript
+const DEFAULT_CONFIG = {
+  MAX_LOGS: 1000,  // Maximum number of logs to keep in memory
+  WS_PORT: 8765,   // WebSocket server port
+  WS_MAX_RETRIES: 5,  // Maximum WebSocket reconnection attempts
+  WS_RETRY_DELAY: 1000,  // Initial delay between reconnection attempts (ms)
+  WS_MAX_RETRY_DELAY: 30000,  // Maximum delay between reconnection attempts (ms)
+  ALLOWED_WS_ORIGINS: [  // Allowed WebSocket origins
+    'ws://localhost',
+    'wss://localhost',
+    'ws://127.0.0.1',
+    'wss://127.0.0.1'
+  ]
+};
+```
 
 ### Development
 ```bash
@@ -102,69 +141,147 @@ npm test
 
 ## Architecture
 
-The extension is built with a modular architecture for better maintainability and testability:
+The extension follows a clean architecture with clear separation of concerns:
 
 ```
 src/
 ├── background/           # Background script and services
-│   ├── index.ts          # Entry point
-│   ├── websocket.ts      # WebSocket manager
-│   ├── network-monitor.ts # Network request monitoring
-│   ├── message-handler.ts # Message handling
-│   └── storage.ts        # Persistent storage
-├── content/              # Content scripts
-├── popup/                # Extension popup UI
-└── utils/                # Shared utilities
-    └── logger.ts         # Logging utility
+│   ├── index.ts          # Background script entry point
+│   ├── websocket.ts      # WebSocket server and client management
+│   └── message-handler.ts # Message handling between components
+├── content/              # Content script for console capture
+│   └── index.ts          # Console log capture implementation
+├── types/                # TypeScript type definitions
+│   └── index.ts          # Shared type definitions
+├── utils/                # Shared utilities
+│   └── logger.ts         # Centralized logging utility
+└── config.ts             # Configuration constants
 ```
+
+### Key Components
+
+1. **Content Script**
+   - Captures console logs using monkey-patching
+   - Implements circular buffer for memory efficiency
+   - Handles log formatting and sanitization
+
+2. **Background Script**
+   - Manages WebSocket server
+   - Handles message routing between content scripts and WebSocket clients
+   - Implements reconnection logic and error handling
+
+3. **WebSocket Server**
+   - Broadcasts console logs to connected clients
+   - Validates client connections
+   - Manages client lifecycle
 
 ## Security & Privacy
 
-- **Data Collection**: The extension only collects data from web pages you explicitly enable it for
-- **Sensitive Data**: Headers like `Authorization`, `Cookie`, and form fields like `password` are automatically masked
-- **Local Processing**: All data processing happens locally in your browser
-- **WebSocket Security**: The WebSocket server only accepts connections from `localhost` by default
-- **Permissions**: The extension requests only the minimum required permissions
+- **Local-First Architecture**: All processing happens in the browser
+- **Secure by Default**:
+  - WebSocket server only accepts connections from `localhost`
+  - Origin validation for WebSocket connections
+  - No external network requests
+- **Data Protection**:
+  - Console logs are kept in memory only
+  - No persistent storage of captured data
+  - No tracking or analytics
+- **Minimal Permissions**:
+  - `activeTab`: Required to inject content scripts
+  - `webNavigation`: For tracking page navigation
+  - `storage`: For persisting user preferences
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **WebSocket Connection Fails**
-   - Ensure no other application is using the default port (8080)
-   - Check the browser console for any error messages
-   - Verify that your firewall allows WebSocket connections
+1. **WebSocket Connection Issues**
+   ```bash
+   # Check if the port is in use
+   lsof -i :8765
+   
+   # Or on Windows:
+   netstat -ano | findstr :8765
+   ```
 
-2. **Network Requests Not Captured**
-   - Make sure the extension has the necessary permissions
-   - Check if the website is using a service worker that might interfere
-   - Try refreshing the page after enabling the extension
+2. **Logs Not Appearing**
+   - Ensure the content script is injected (check Chrome's background page console)
+   - Verify the tab has the content script active (look for the extension icon in the address bar)
+   - Check for any errors in the browser's developer console
 
-3. **High CPU/Memory Usage**
-   - The extension is designed to be lightweight, but monitoring many requests can be resource-intensive
-   - Try filtering out unnecessary requests in the configuration
+3. **Performance Considerations**
+   - The extension uses a circular buffer to limit memory usage
+   - Each tab maintains its own log buffer
+   - High log volume may impact performance (adjust `MAX_LOGS` in config if needed)
 
-## Contributing
+### Debugging
 
-Contributions are welcome! Here's how you can help:
+1. **Content Script Debugging**
+   - Open Chrome DevTools
+   - Go to the Console tab
+   - Filter for messages from the extension
 
-1. Report bugs by opening an issue
-2. Suggest new features or improvements
-3. Submit pull requests with bug fixes or new features
+2. **Background Script Debugging**
+   - Go to `chrome://extensions/`
+   - Find the extension and click "background page" to open DevTools
 
-### Development Setup
+3. **WebSocket Debugging**
+   - Use a WebSocket client like Postman or `wscat`
+   - Monitor WebSocket frames in Chrome's Network tab
 
-1. Fork and clone the repository
-2. Install dependencies: `npm install`
-3. Start the development server: `npm run dev`
-4. Load the extension in Chrome as described in the Installation section
+## Development
+
+### Prerequisites
+- Node.js 16+
+- npm 8+
+- Google Chrome or Chromium
+
+### Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Build the extension
+npm run build
+
+# Build in watch mode
+npm run dev
+```
+
+### Testing
+
+```bash
+# Run tests
+npm test
+
+# Run tests in watch mode
+npm test -- --watch
+
+# Run type checking
+npm run type-check
+
+# Lint code
+npm run lint
+```
 
 ### Code Style
 
-- Follow the existing code style
-- Use TypeScript types wherever possible
-- Write tests for new features
-- Update documentation when making changes
+- 2-space indentation
+- Single quotes
+- Semicolons
+- TypeScript strict mode
+- ESLint + Prettier for code formatting
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+Please include tests for new features and ensure all tests pass before submitting.
 
 ## License
 

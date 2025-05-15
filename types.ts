@@ -10,15 +10,27 @@ export interface WebSocketEventMap {
 
 export type WebSocketEventType = keyof WebSocketEventMap;
 
+export type LogLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
+
+export interface ConsoleLogContext {
+  userAgent: string;
+  timestamp: number;
+  location: string;
+  [key: string]: any;
+}
+
 export interface ConsoleLog {
+  id: string;
   timestamp: string;
-  level: 'log' | 'info' | 'warn' | 'error' | 'debug';
+  level: LogLevel;
   message: string;
   url: string;
   tabId: number | null;
-  stackTrace?: string;
+  stack?: string;
   lineNumber?: number;
   columnNumber?: number;
+  context?: ConsoleLogContext;
+  [key: string]: any;
 }
 
 export interface NetworkRequest {
