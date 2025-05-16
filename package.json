@@ -7,16 +7,23 @@
     "build": "tsc",
     "watch": "tsc -w",
     "lint": "eslint . --ext .ts,.js",
-    "test": "jest"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:db": "jest __tests__/db.test.ts",
+    "test:query": "jest __tests__/query.test.ts",
+    "test:api": "jest __tests__/api.test.ts"
   },
   "dependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^11.10.0",
     "webextension-polyfill": "^0.12.0",
     "ws": "^8.18.2"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.250",
     "@types/jest": "^29.5.11",
-    "@types/node": "^20.11.0",
+    "@types/node": "^20.17.47",
     "@types/webextension-polyfill": "^0.12.3",
     "@typescript-eslint/eslint-plugin": "^6.18.0",
     "@typescript-eslint/parser": "^6.18.0",
@@ -36,6 +43,25 @@
     ],
     "testMatch": [
       "**/__tests__/**/*.test.ts"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.ts",
+      "!src/**/*.d.ts"
+    ],
+    "coveragePathIgnorePatterns": [
+      "/node_modules/",
+      "/__tests__/"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 80,
+        "functions": 85,
+        "lines": 90,
+        "statements": 90
+      }
+    },
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest.setup.ts"
     ]
   }
 }

@@ -1,5 +1,35 @@
+/// <reference types="chrome" />
 import { ConsoleLog, LogLevel } from './types';
 import { Logger } from './utils';
+
+// Extend the Window interface to include our custom properties
+declare global {
+  interface Window {
+    __capturedConsoleLogs: ConsoleLog[];
+  }
+}
+
+// Type definitions for chrome.runtime API
+interface ChromeRuntime {
+  id?: string;
+  sendMessage: (
+    message: any,
+    responseCallback?: (response: any) => void
+  ) => void;
+  onMessage: {
+    addListener: (
+      callback: (
+        message: any,
+        sender: chrome.runtime.MessageSender,
+        sendResponse: (response?: any) => void
+      ) => void
+    ) => void;
+  };
+}
+
+declare const chrome: {
+  runtime: ChromeRuntime;
+};
 
 // Default configuration
 const DEFAULT_CONFIG = {
@@ -98,7 +128,7 @@ const logger = Logger.getInstance();
   }
 
   // Send log to background script with retry logic
-  function sendLogToBackground(logEntry: ConsoleLog, retryCount = 0) {
+  function sendLogToBackground(logEntry: ConsoleLog, retryCount = 0): void {
     const message = { action: 'consoleLog', data: logEntry };
     
     const handleError = (error: unknown) => {
@@ -126,7 +156,7 @@ const logger = Logger.getInstance();
   window.__capturedConsoleLogs = capturedLogs;
 
   // Listen for requests from the background script
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: (response?: any) => void) => {
     try {
       switch (message?.action) {
         case 'getCapturedLogs':

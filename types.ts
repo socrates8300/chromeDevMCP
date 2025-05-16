@@ -48,6 +48,7 @@ export interface NetworkRequest {
   responseError: string | null;
   responseBody?: any;
   ip?: string;
+  tabId?: number | null;
   timing: {
     startTime: number;
     endTime: number | null;

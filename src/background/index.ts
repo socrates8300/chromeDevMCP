@@ -3,6 +3,7 @@ import { initNetworkMonitoring } from './network-monitor';
 import { setupMessageHandlers } from './message-handler';
 import { WebSocketManager } from './websocket';
 import { loadSettings } from './storage';
+import '../db'; // Initialize the database
 
 // Initialize the extension
 async function initExtension(): Promise<void> {
@@ -14,7 +15,7 @@ async function initExtension(): Promise<void> {
     logger.setLogLevel(settings.logLevel);
     
     // Initialize WebSocket connection
-    const wsManager = new WebSocketManager(settings.port);
+    const wsManager = WebSocketManager.getInstance(settings.port);
     
     // Initialize network monitoring with WebSocket manager
     await initNetworkMonitoring(wsManager);
@@ -22,7 +23,7 @@ async function initExtension(): Promise<void> {
     // Set up message handlers with WebSocket manager
     setupMessageHandlers(wsManager);
     
-    logger.info('Extension initialized successfully');
+    logger.info('Extension initialized successfully with database support');
   } catch (error) {
     console.error('Failed to initialize extension:', error);
   }

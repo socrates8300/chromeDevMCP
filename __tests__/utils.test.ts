@@ -6,7 +6,10 @@ describe('Utils', () => {
     port: 8765,
     maxStoredRequests: 500,
     sensitiveHeaders: ['cookie', 'set-cookie', 'authorization', 'proxy-authorization', 'x-csrf-token'],
-    sensitiveFormFields: ['password', 'token', 'auth', 'key', 'secret']
+    sensitiveFormFields: ['password', 'token', 'auth', 'key', 'secret'],
+    enabled: true,
+    captureConsole: true,
+    captureNetwork: true
   };
 
   describe('formatHeaders', () => {

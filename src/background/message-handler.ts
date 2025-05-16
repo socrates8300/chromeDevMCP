@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger';
 import { WebSocketManager } from './websocket';
 import { getPort, setPort } from './storage';
+import { saveConsoleLog, saveNetworkRequest, queryConsoleLogs, queryNetworkRequests } from './db';
 
 // Store the WebSocket manager instance
 let wsManager: WebSocketManager | null = null;
@@ -18,6 +19,26 @@ export function setupMessageHandlers(wsManagerInstance: WebSocketManager): void 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try {
       switch (message.action) {
+        case 'log':
+          // Save console log to database
+          if (message.data && message.data.log) {
+            saveConsoleLog({
+              ...message.data.log,
+              tabId: sender.tab?.id || null
+            });
+          }
+          break;
+          
+        case 'network':
+          // Save network request to database
+          if (message.data && message.data.request) {
+            saveNetworkRequest({
+              ...message.data.request,
+              tabId: sender.tab?.id || null
+            });
+          }
+          break;
+          
         case 'getTabData':
           handleGetTabData(message.tabId, sendResponse);
           return true; // Required for async response
@@ -28,6 +49,14 @@ export function setupMessageHandlers(wsManagerInstance: WebSocketManager): void 
           
         case 'getNetworkRequests':
           handleGetNetworkRequests(message.tabId, sendResponse);
+          return true;
+          
+        case 'queryLogs':
+          handleQueryLogs(message.query, message.params || [], sendResponse);
+          return true;
+          
+        case 'queryNetworkRequests':
+          handleQueryNetworkRequests(message.query, message.params || [], sendResponse);
           return true;
           
         case 'clearNetworkRequests':
@@ -148,6 +177,28 @@ async function handleRestartServer(sendResponse: (response: any) => void): Promi
   }
 }
 
+// Handle query logs
+async function handleQueryLogs(query: string, params: any[], sendResponse: (response: any) => void) {
+  try {
+    const results = await queryConsoleLogs(query, params);
+    sendResponse({ success: true, data: results });
+  } catch (error) {
+    logger.error('Error querying logs:', error);
+    sendResponse({ success: false, error: 'Failed to query logs' });
+  }
+}
+
+// Handle query network requests
+async function handleQueryNetworkRequests(query: string, params: any[], sendResponse: (response: any) => void) {
+  try {
+    const results = await queryNetworkRequests(query, params);
+    sendResponse({ success: true, data: results });
+  } catch (error) {
+    logger.error('Error querying network requests:', error);
+    sendResponse({ success: false, error: 'Failed to query network requests' });
+  }
+}
+
 // Export for testing
 export const __test__ = {
   tabData,
@@ -155,5 +206,8 @@ export const __test__ = {
   handleClearTabData,
   handleGetNetworkRequests,
   handleClearNetworkRequests,
-  handleRestartServer
+  handleUpdatePort,
+  handleRestartServer,
+  handleQueryLogs,
+  handleQueryNetworkRequests
 };
